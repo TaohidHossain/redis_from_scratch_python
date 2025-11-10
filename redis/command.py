@@ -1,8 +1,10 @@
+import time
 from redis.response import *
 
 class CommandHandler:
     def __init__(self, storage):
         self.storage = storage
+        self.command_count = 0
         self.commands = {
             "PING": self.ping,
             "ECHO": self.echo,
@@ -12,12 +14,18 @@ class CommandHandler:
             "EXISTS": self.exists,
             "KEYS": self.keys,
             "FLUSHALL": self.flushall,
-            "INFO": self.info
+            "INFO": self.info,
+            "EXPIRE": self.expire,
+            "EXPIREAT": self.expireat,
+            "TTL": self.ttl,
+            "PTTL": self.pttl,
+            "PERSIST": self.persist,
+            "TYPE": self.get_type
         }
 
     def execute(self, command, *args):
         cmd = self.commands.get(command.upper())
-        print(cmd)
+        self.command_count += 1
         if cmd:
             return cmd(*args)
         return error(f"Unknown command {command}")
@@ -31,7 +39,20 @@ class CommandHandler:
     def set(self, *args):
         if len(args) < 2:
             return error("Wrong number of arguments for 'SET' command")
-        self.storage.set(args[0], " ".join(args[1:]))
+        
+        key = args[0]
+        value = " ".join(args[1:])
+        expiry_time = None
+
+        if len(args) >= 4 and args[-2].upper() == "EX":
+            try:
+                seconds = int(args[-1])
+                expiry_time = time.time() + seconds
+                value = " ".join(args[1:-2])
+            except ValueError:
+                return error("Invalid expire time")
+
+        self.storage.set(key, value, expiry_time)
         return ok()
     
     def get(self, *args):
@@ -50,7 +71,8 @@ class CommandHandler:
         return integer(self.storage.exists(*args))
     
     def keys(self, *args):
-        keys = self.storage.keys()
+        pattern = args[0] if args else "*"
+        keys = self.storage.keys(pattern)
         if not keys:
             return array([])
         return array([bulk_string(key) for key in keys])
@@ -60,20 +82,100 @@ class CommandHandler:
         return ok()
 
     def info(self, *args):
+        memory_usage = self.storage.get_memory_usage()
+        key_count = len(self.storage.keys())
         info = {
             "server": {
                 "redis_version": "0.1.0-custom",
                 "redis_mode": "standalone"
             },
             "stats": {
-                "total_commands_processed": 0  # Would track this in server
+                "total_commands_processed": self.command_count
+            },
+            "memory": {
+                "used_memory": memory_usage,
+                "used_memory_human": self._formate_bytes(memory_usage)
             },
             "keyspace": {
-                "db0": f"keys={len(self.storage.keys())},expires=0"
+                "db0": f"keys={key_count},expires=0"
             }
         }
         sections = []
         for section, data in info.items():
             sections.append(f"#{section}")
             sections.extend(f"{k}:{v}" for k, v in data.items())
+            sections.append("")
         return bulk_string("\n".join(sections))
+    
+    def _formate_bytes(self, bytes_count):
+        """Format bytes in human readable format"""
+        for unit in ['B', 'K', 'M', 'G']:
+            if bytes_count < 1024:
+                return f"{bytes_count:.1f}{unit}"
+            bytes_count /= 1024
+        return f"{bytes_count:.1f}T"
+    
+    def expire(self, *args):
+        if len(args) != 2:
+            return error("Wrong number of arguments for 'PTTL' command")
+        
+        key = args[0]
+        try:
+            seconds = int(args[1])
+            if seconds <= 0:
+                return integer(0)
+            success = self.storage.expire_at(key, seconds)
+            return integer(1 if success else 0)
+        except ValueError:
+            return error("Invalid timestamp")
+    
+    def expireat(self, *args):
+        if len(args) != 2:
+            return error("Wrong number of arguments for 'PTTL' command")
+        
+        key = args[0]
+        try:
+            timestamp = int(args[1])
+            if timestamp <= time.time():
+                return integer(0)
+            success = self.storage.expire_at(key, timestamp)
+            return integer(1 if success else 0)
+        except ValueError:
+            return error("Invalid timestamp")
+    
+    def ttl(self, *args):
+        if len(args) != 1:
+            return error("Wrong number of arguments for 'TTL' command")
+
+        ttl_value = self.storage.ttl(args[0])
+        if ttl_value == -1:
+            return simple_string(f"No expiration set for key: {args[0]}")
+        elif ttl_value == -2:
+            return simple_string(f"Key has expired: {args[0]}")
+        
+        return integer(ttl_value)
+    
+    def pttl(self, *args):
+        if len(args) != 1:
+            return error("Wrong number of arguments for 'PTTL' command")
+
+        pttl_value = self.storage.pttl(args[0])
+        if pttl_value == -1:
+            return simple_string(f"No expiration set for key: {args[0]}")
+        elif pttl_value == -2:
+            return simple_string(f"Key has expired: {args[0]}")
+        
+        return integer(pttl_value)
+
+    def persist(self, *args):
+        if len(args) != 1:
+            return error("Wrong number of arguments for 'PERSIST' command")
+        success = self.storage.persist(args[0])
+        return integer(1 if success else 0)
+    
+    def get_type(self, *args):
+        if len(args) != 1:
+            return error("wrong number of arguments for 'type' command")
+        
+        data_type = self.storage.get_type(args[0])
+        return simple_string(data_type)

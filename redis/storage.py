@@ -99,28 +99,32 @@ class DataStore:
             return -2
 
         value, _, expiry_time = self._data[key]
+        if expiry_time == None:
+            return -1
+        
         remaining = expiry_time - time.time()
-
         if remaining <= 0:
             self._memory_usage -= self._calculate_memory_usage(key, value)
             del self._data[key]
             return -2
         
-        return integer(remaining)
+        return remaining
     
     def pttl(self, key):
         if key not in self._data:
             return -2
 
         value, _, expiry_time = self._data[key]
+        if expiry_time == None:
+            return -1
+        
         remaining = expiry_time - time.time()
-
         if remaining <= 0:
             self._memory_usage -= self._calculate_memory_usage(key, value)
             del self._data[key]
             return -2
         
-        return integer(remaining * 1000)
+        return remaining * 1000
     
     def peresist(self, key):
         if not self._is_valid_key(key):
@@ -147,3 +151,6 @@ class DataStore:
                 del self._data[key]
                 count += 1
         return count
+    
+    def get_memory_usage(self):
+        return self._memory_usage

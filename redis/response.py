@@ -13,7 +13,7 @@ def simple_string(value):
 def bulk_string(value):
     if value is None:
         return null_bulk_string()
-    return f"${len(value)}\r\n{value}".encode()
+    return f"${len(value)}\r\n{value}\r\n".encode()
 
 def error(message):
     return f"-ERR {message}\r\n".encode()
