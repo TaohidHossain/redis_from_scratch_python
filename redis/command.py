@@ -1,6 +1,6 @@
 from redis.response import *
 
-class CommandHandler():
+class CommandHandler:
     def __init__(self, storage):
         self.storage = storage
         self.commands = {
