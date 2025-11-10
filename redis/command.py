@@ -16,7 +16,8 @@ class CommandHandler:
         }
 
     def execute(self, command, *args):
-        cmd = self.commads.get(command.upper())
+        cmd = self.commands.get(command.upper())
+        print(cmd)
         if cmd:
             return cmd(*args)
         return error(f"Unknown command {command}")
@@ -36,7 +37,7 @@ class CommandHandler:
     def get(self, *args):
         if len(args) != 1:
             return error("wrong number of arguments for 'GET' command")
-        return   bulk_string(self.storage.get(args[0]))
+        return bulk_string(self.storage.get(args[0]))
     
     def delete(self, *args):
         if not args:

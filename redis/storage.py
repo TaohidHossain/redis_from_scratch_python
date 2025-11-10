@@ -6,7 +6,7 @@ class DataStore:
         self._data[key] = value
     
     def get(self, key):
-        return self._data[key]
+        return self._data.get(key)
     
     def delete(self, *keys):
         count = 0

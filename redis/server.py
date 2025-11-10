@@ -38,7 +38,7 @@ class Redis:
                     if sock is self.server_socket:
                         self._accept_client()
                     else:
-                        self._hanlde_client(sock)
+                        self._handle_client(sock)
 
             except KeyboardInterrupt:
                 break
@@ -92,7 +92,7 @@ class Redis:
         self.running = False
         for client in list(self.clients.keys()):
             self._disconnect_client(client)
-        if self.server_socketL:
+        if self.server_socket:
             self.server_socket.close()
             self.server_socket = None
 
