@@ -1,4 +1,4 @@
-class DataStore():
+class DataStore:
     def __init__(self):
         self._data = {}
     
