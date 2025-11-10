@@ -1,6 +1,8 @@
 import time
 import fnmatch
 
+from redis.response import integer
+
 class DataStore:
     def __init__(self):
         # storage formate: { key : (value, type, expiry_time)}
@@ -74,3 +76,74 @@ class DataStore:
             return "hash"
         else:
             return "string"
+        
+    def expire(self, key, seconds):
+        if not self._is_valid_key(key):
+            return False
+        
+        value, data_type, _ = self._data[key]
+        expiry_time = time.time() + seconds
+        self._data[key] = (value, data_type, expiry_time)
+        return True
+    
+    def expire_at(self, key, timestamp):
+        if not self._is_valid_key(key):
+            return False
+        
+        value, data_type, _ = self._data[key]
+        self._data[key] = (value, data_type, timestamp)
+        return True
+    
+    def ttl(self, key):
+        if key not in self._data:
+            return -2
+
+        value, _, expiry_time = self._data[key]
+        remaining = expiry_time - time.time()
+
+        if remaining <= 0:
+            self._memory_usage -= self._calculate_memory_usage(key, value)
+            del self._data[key]
+            return -2
+        
+        return integer(remaining)
+    
+    def pttl(self, key):
+        if key not in self._data:
+            return -2
+
+        value, _, expiry_time = self._data[key]
+        remaining = expiry_time - time.time()
+
+        if remaining <= 0:
+            self._memory_usage -= self._calculate_memory_usage(key, value)
+            del self._data[key]
+            return -2
+        
+        return integer(remaining * 1000)
+    
+    def peresist(self, key):
+        if not self._is_valid_key(key):
+            return False
+        value, data_type, _ = self._data[key]
+        self._data[key] = (value, data_type, None)
+        return True
+    
+    def get_type(self, key):
+        if not self._is_valid_key(key):
+            return "none"
+        _, data_type, _ = self._data[key]
+        return data_type
+    
+    def cleanup_expired_keys(self):
+        if not self._data:
+            return 0
+        
+        count = 0
+        for key in list(self._data.keys()):
+            value, _, expiry_time = self._data[key]
+            if expiry_time is not None and expiry_time <= time.time():
+                self._memory_usage -= self._calculate_memory_usage(key, value)
+                del self._data[key]
+                count += 1
+        return count
